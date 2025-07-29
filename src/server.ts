@@ -5,7 +5,9 @@ import { transactionsRoutes } from './routes/transaction'
 const server = fastify()
 const port = 7777
 
-server.register(transactionsRoutes)
+server.register(transactionsRoutes, {
+    prefix: '/transactions',
+})
 
 
 server.listen(
