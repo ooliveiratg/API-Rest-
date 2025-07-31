@@ -2,33 +2,59 @@ import { FastifyInstance } from "fastify"
 import { z } from "zod"
 import { knex } from "../database"
 import {randomUUID} from "node:crypto";
+import {checkSessionIdExists} from "../middleware/check-sessionId-exists";
+
 
 
 export async function transactionsRoutes(server: FastifyInstance){
 
-    server.get('/', async (request, reply) => {
-        const transactions = await knex('transactions').select()
+    server.get('/', {
+        preHandler: [ checkSessionIdExists ]
+    },async (request, reply) => {
+        const sessionId = request.cookies.session_id
+
+        if(!sessionId){
+            return reply.status(401).send({
+                error: 'Unauthorized',
+                }
+            )
+        }
+        const transactions = await knex('transactions')
+            .where('session_id', sessionId)
+            .select()
         return {
             transactions
         }
     })
 
-    server.get('/[summary', async () => {
-        const summary = await  knex('transactions').sum('amount', { as: "amount"}).first
+    server.get('/summary', {
+        preHandler: [ checkSessionIdExists ]
+    }, async (request) => {
+        const { sessionId } = request.cookies
+        const summary = await  knex('transactions')
+            .where('session_id', sessionId)
+            .sum('amount', { as: "amount"})
+            .first
         return {
             summary
         }
     })
 
-    server.get('/:id', async (request) => {
+    server.get('/:id', {
+        preHandler: [ checkSessionIdExists ]
+    }, async (request) => {
         const getTransactionParamsSchema = z.object({
             id: z.string().uuid(),
         })
 
         const { id } = getTransactionParamsSchema.parse(request.params)
+        const {sessionId} = request.cookies
 
         const transaction = await knex('transactions')
-            .where('id', id)
+            .where({
+                session_id: sessionId,
+                id
+            })
             .first()
 
         return {
@@ -51,7 +77,7 @@ export async function transactionsRoutes(server: FastifyInstance){
             sessionId = randomUUID()
             reply.cookie('session_id', sessionId, {
             path: '/',
-            maxAge: 1000 * 60 * 60 *24 * 7, // 7 days
+            maxAge: 60 * 60 *24 * 7, // 7 days
             })
         }
    await knex('transactions').insert({
